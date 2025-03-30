@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/securities-exam-reviewer/static/css/main.c7d2b172.css",
-    "main.js": "/securities-exam-reviewer/static/js/main.e2bec16c.js",
+    "main.js": "/securities-exam-reviewer/static/js/main.b4476398.js",
     "static/js/453.e46173e0.chunk.js": "/securities-exam-reviewer/static/js/453.e46173e0.chunk.js",
     "index.html": "/securities-exam-reviewer/index.html",
     "main.c7d2b172.css.map": "/securities-exam-reviewer/static/css/main.c7d2b172.css.map",
-    "main.e2bec16c.js.map": "/securities-exam-reviewer/static/js/main.e2bec16c.js.map",
+    "main.b4476398.js.map": "/securities-exam-reviewer/static/js/main.b4476398.js.map",
     "453.e46173e0.chunk.js.map": "/securities-exam-reviewer/static/js/453.e46173e0.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.c7d2b172.css",
-    "static/js/main.e2bec16c.js"
+    "static/js/main.b4476398.js"
   ]
 }
