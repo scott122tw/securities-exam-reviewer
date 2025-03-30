@@ -60,8 +60,16 @@ const ExamReviewer = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // 替換為fetch API (VS Code開發用)
-        const response = await fetch('/questions_with_answers.csv');
+        // 使用相對路徑以支援 GitHub Pages 部署
+        const csvPath = process.env.PUBLIC_URL + '/questions_with_answers.csv';
+        console.log('嘗試載入 CSV 檔案:', csvPath);
+        
+        const response = await fetch(csvPath);
+        
+        if (!response.ok) {
+          throw new Error(`CSV 檔案載入失敗: ${response.status} ${response.statusText}`);
+        }
+        
         const text = await response.text();
         
         Papa.parse(text, {
@@ -93,7 +101,7 @@ const ExamReviewer = () => {
           }
         });
       } catch (error) {
-        console.error('Error reading file:', error);
+        console.error('載入資料錯誤:', error);
         setLoading(false);
       }
     };
