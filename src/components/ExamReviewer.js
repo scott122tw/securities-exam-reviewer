@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Papa from 'papaparse';
 import _ from 'lodash';
 
@@ -33,17 +33,29 @@ const ExamReviewer = () => {
   const [questionStats, setQuestionStats] = useState({}); // 記錄每個題目的錯誤次數
   const [markedQuestions, setMarkedQuestions] = useState([]); // 標記為"不會"的題目
   const [showMarkedOnly, setShowMarkedOnly] = useState(false); // 是否只顯示標記的題目
+  // 筆記相關狀態
   const [notes, setNotes] = useState({}); // 儲存每個題目的筆記
   const [currentNote, setCurrentNote] = useState(''); // 當前題目的筆記
   const [showNoteEditor, setShowNoteEditor] = useState(false); // 是否顯示筆記編輯器
   const [showNoteSection, setShowNoteSection] = useState(false); // 是否顯示筆記區域
-  const [tags, setTags] = useState({}); // 儲存題目的標籤 {questionId: [tag1, tag2, ...]}
-  const [currentTag, setCurrentTag] = useState(''); // 當前輸入的標籤
-  const [allTags, setAllTags] = useState([]); // 所有已使用的標籤列表
-  const [selectedTag, setSelectedTag] = useState(''); // 當前選擇的篩選標籤
-  const [testResults, setTestResults] = useState([]);
+  // 新增富文字編輯器狀態
+  const [richTextFormat, setRichTextFormat] = useState({}); // 儲存每個題目的筆記格式信息
+  const [currentFormat, setCurrentFormat] = useState({
+    bold: false,
+    italic: false,
+    color: 'black',
+    fontSize: 'normal'
+  });
+  const editorRef = useRef(null);
+  // 新增標籤相關狀態
+  const [tags, setTags] = useState({}); // 儲存每個題目的標籤列表
+  const [allTags, setAllTags] = useState([]); // 所有可用的標籤列表
+  const [filteredTags, setFilteredTags] = useState([]); // 過濾後的標籤列表
   const [tagSearchQuery, setTagSearchQuery] = useState(''); // 標籤搜尋查詢
-  const [filteredTags, setFilteredTags] = useState([]); // 經過篩選的標籤
+  const [selectedTag, setSelectedTag] = useState(''); // 目前選擇的標籤
+  const [currentTag, setCurrentTag] = useState(''); // 目前正在輸入的標籤
+  const [testResults, setTestResults] = useState([]); // 測驗結果
+
   // 從CSV載入資料
   useEffect(() => {
     const loadData = async () => {
@@ -93,8 +105,97 @@ const ExamReviewer = () => {
       const currentQuestion = filteredQuestions[currentQuestionIndex];
       const questionId = `${currentQuestion['考試標題']}_${currentQuestion['科目']}_${currentQuestion['題號']}`;
       setCurrentNote(notes[questionId] || '');
+      setCurrentFormat(richTextFormat[questionId] || {
+        bold: false,
+        italic: false,
+        color: 'black',
+        fontSize: 'normal'
+      });
     }
-  }, [currentQuestionIndex, filteredQuestions, notes]);
+  }, [currentQuestionIndex, filteredQuestions, notes, richTextFormat]);
+  // 標籤相關函式
+  // 新增標籤到當前題目
+  const addTag = (tag) => {
+    if (!tag.trim()) return;
+    
+    const currentQuestion = filteredQuestions[currentQuestionIndex];
+    const questionId = `${currentQuestion['考試標題']}_${currentQuestion['科目']}_${currentQuestion['題號']}`;
+    
+    // 檢查標籤是否已存在於此題目
+    const existingTags = tags[questionId] || [];
+    if (existingTags.includes(tag)) return;
+    
+    // 新增標籤到當前題目
+    const updatedTags = {
+      ...tags,
+      [questionId]: [...existingTags, tag]
+    };
+    setTags(updatedTags);
+    
+    // 更新所有標籤列表
+    if (!allTags.includes(tag)) {
+      setAllTags([...allTags, tag]);
+    }
+    
+    // 清空當前正在輸入的標籤
+    setCurrentTag('');
+    
+    // 顯示新增成功的提示
+    const feedback = document.createElement('div');
+    feedback.className = `fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg`;
+    feedback.textContent = `成功新增標籤：${tag}`;
+    document.body.appendChild(feedback);
+    
+    setTimeout(() => {
+      document.body.removeChild(feedback);
+    }, 2000);
+  };
+
+  // 移除標籤
+  const removeTag = (tag) => {
+    const currentQuestion = filteredQuestions[currentQuestionIndex];
+    const questionId = `${currentQuestion['考試標題']}_${currentQuestion['科目']}_${currentQuestion['題號']}`;
+    
+    // 從當前題目移除標籤
+    const existingTags = tags[questionId] || [];
+    const updatedTags = {
+      ...tags,
+      [questionId]: existingTags.filter(t => t !== tag)
+    };
+    setTags(updatedTags);
+    
+    // 更新所有標籤列表（檢查是否還有其他題目使用此標籤）
+    let stillUsed = false;
+    Object.values(updatedTags).forEach(tagList => {
+      if (tagList.includes(tag)) {
+        stillUsed = true;
+      }
+    });
+    
+    if (!stillUsed) {
+      setAllTags(allTags.filter(t => t !== tag));
+      // 如果目前選擇的標籤被移除，清空選擇
+      if (selectedTag === tag) {
+        setSelectedTag('');
+      }
+    }
+    
+    // 顯示移除成功的提示
+    const feedback = document.createElement('div');
+    feedback.className = `fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg`;
+    feedback.textContent = `成功移除標籤：${tag}`;
+    document.body.appendChild(feedback);
+    
+    setTimeout(() => {
+      document.body.removeChild(feedback);
+    }, 2000);
+  };
+
+  // 按標籤篩選題目
+  const filterByTag = (tag) => {
+    setSelectedTag(tag);
+  };
+
   // 當全部標籤更新或搜尋查詢變更時，更新過濾後的標籤
   useEffect(() => {
     if (tagSearchQuery.trim() === '') {
@@ -396,15 +497,21 @@ const ExamReviewer = () => {
     }
   };
   
-  // 保存筆記
+  // 保存筆記，包含格式化資訊
   const saveNote = () => {
     const currentQuestion = filteredQuestions[currentQuestionIndex];
     const questionId = `${currentQuestion['考試標題']}_${currentQuestion['科目']}_${currentQuestion['題號']}`;
     
-    // 儲存筆記
+    // 儲存筆記內容
     setNotes(prev => ({
       ...prev,
       [questionId]: currentNote
+    }));
+    
+    // 儲存格式化資訊
+    setRichTextFormat(prev => ({
+      ...prev,
+      [questionId]: currentFormat
     }));
     
     // 顯示保存成功的提示
@@ -420,105 +527,98 @@ const ExamReviewer = () => {
     // 關閉編輯器
     setShowNoteEditor(false);
   };
-  
-  // 添加標籤
-  const addTag = () => {
-    if (!currentTag.trim()) return;
+
+  // 當前題目變更時載入筆記及其格式
+  useEffect(() => {
+    if (filteredQuestions.length > 0 && currentQuestionIndex < filteredQuestions.length) {
+      const currentQuestion = filteredQuestions[currentQuestionIndex];
+      const questionId = `${currentQuestion['考試標題']}_${currentQuestion['科目']}_${currentQuestion['題號']}`;
+      setCurrentNote(notes[questionId] || '');
+      setCurrentFormat(richTextFormat[questionId] || {
+        bold: false,
+        italic: false,
+        color: 'black',
+        fontSize: 'normal'
+      });
+    }
+  }, [currentQuestionIndex, filteredQuestions, notes, richTextFormat]);
+
+  // 應用文字格式
+  const applyFormat = (formatType, value) => {
+    // 獲取選中的文字
+    const editor = editorRef.current;
+    const selectionStart = editor.selectionStart;
+    const selectionEnd = editor.selectionEnd;
     
-    const currentQuestion = filteredQuestions[currentQuestionIndex];
-    const questionId = `${currentQuestion['考試標題']}_${currentQuestion['科目']}_${currentQuestion['題號']}`;
-    
-    // 檢查標籤是否已存在
-    const existingTags = tags[questionId] || [];
-    if (existingTags.includes(currentTag.trim())) {
-      // 顯示標籤已存在的提示
-      const feedback = document.createElement('div');
-      feedback.className = `fixed top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded shadow-lg`;
-      feedback.textContent = '此標籤已存在';
-      document.body.appendChild(feedback);
-      
-      setTimeout(() => {
-        document.body.removeChild(feedback);
-      }, 2000);
-      
+    if (selectionStart === selectionEnd) {
+      // 如果沒有選中文字，則更新當前格式狀態
+      setCurrentFormat(prev => ({ 
+        ...prev, 
+        [formatType]: value 
+      }));
       return;
     }
     
-    // 添加新標籤
-    const newTags = [...existingTags, currentTag.trim()];
-    setTags(prev => ({
-      ...prev,
-      [questionId]: newTags
-    }));
+    // 根據格式類型應用不同的標記
+    let formattedText = currentNote;
+    let formatMarker = '';
     
-    // 更新所有標籤列表
-    if (!allTags.includes(currentTag.trim())) {
-      setAllTags(prev => [...prev, currentTag.trim()].sort());
+    switch (formatType) {
+      case 'bold':
+        formatMarker = '**';
+        break;
+      case 'italic':
+        formatMarker = '_';
+        break;
+      case 'color':
+        formatMarker = `[color=${value}]`;
+        const closingMarker = '[/color]';
+        formattedText = 
+          formattedText.substring(0, selectionStart) + 
+          formatMarker + 
+          formattedText.substring(selectionStart, selectionEnd) + 
+          closingMarker + 
+          formattedText.substring(selectionEnd);
+        setCurrentNote(formattedText);
+        editor.focus();
+        editor.selectionStart = selectionStart + formatMarker.length;
+        editor.selectionEnd = selectionEnd + formatMarker.length;
+        return;
+      case 'fontSize':
+        formatMarker = `[size=${value}]`;
+        const closingSizeMarker = '[/size]';
+        formattedText = 
+          formattedText.substring(0, selectionStart) + 
+          formatMarker + 
+          formattedText.substring(selectionStart, selectionEnd) + 
+          closingSizeMarker + 
+          formattedText.substring(selectionEnd);
+        setCurrentNote(formattedText);
+        editor.focus();
+        editor.selectionStart = selectionStart + formatMarker.length;
+        editor.selectionEnd = selectionEnd + formatMarker.length;
+        return;
+      default:
+        return;
     }
     
-    // 清空輸入框
-    setCurrentTag('');
+    // 應用標準標記格式 (粗體與斜體)
+    formattedText = 
+      formattedText.substring(0, selectionStart) + 
+      formatMarker + 
+      formattedText.substring(selectionStart, selectionEnd) + 
+      formatMarker + 
+      formattedText.substring(selectionEnd);
     
-    // 顯示添加成功的提示
-    const feedback = document.createElement('div');
-    feedback.className = `fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow-lg`;
-    feedback.textContent = `標籤「${currentTag.trim()}」已添加`;
-    document.body.appendChild(feedback);
+    setCurrentNote(formattedText);
     
-    setTimeout(() => {
-      document.body.removeChild(feedback);
-    }, 2000);
+    // 恢復焦點和選擇範圍
+    editor.focus();
+    editor.selectionStart = selectionStart + formatMarker.length;
+    editor.selectionEnd = selectionEnd + formatMarker.length;
   };
-  
-  // 移除標籤
-  const removeTag = (tagToRemove) => {
-    // 確認是否要刪除標籤
-    if (!window.confirm(`確定要刪除標籤「${tagToRemove}」嗎？`)) {
-      return; // 用戶取消刪除
-    }
 
-    const currentQuestion = filteredQuestions[currentQuestionIndex];
-    const questionId = `${currentQuestion['考試標題']}_${currentQuestion['科目']}_${currentQuestion['題號']}`;
-    
-    // 從題目中移除標籤
-    const existingTags = tags[questionId] || [];
-    const newTags = existingTags.filter(tag => tag !== tagToRemove);
-    
-    setTags(prev => ({
-      ...prev,
-      [questionId]: newTags
-    }));
-    
-    // 顯示移除成功的提示
-    const feedback = document.createElement('div');
-    feedback.className = `fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg`;
-    feedback.textContent = `標籤「${tagToRemove}」已移除`;
-    document.body.appendChild(feedback);
-    
-    setTimeout(() => {
-      document.body.removeChild(feedback);
-    }, 2000);
-    
-    // 如果沒有其他題目使用此標籤，也從全局標籤列表中移除
-    let tagStillInUse = false;
-    Object.values(tags).forEach(tagList => {
-      if (tagList.includes(tagToRemove)) {
-        tagStillInUse = true;
-      }
-    });
-    
-    if (!tagStillInUse) {
-      setAllTags(prev => prev.filter(tag => tag !== tagToRemove));
-      setFilteredTags(prev => prev.filter(tag => tag !== tagToRemove));
-      
-      // 如果當前篩選的就是這個標籤，清除篩選
-      if (selectedTag === tagToRemove) {
-        setSelectedTag('');
-      }
-    }
-  };
-  
-  // 匯出筆記
+  // 匯出筆記，包含格式化資訊
   const exportNotes = () => {
     // 準備匯出的資料
     const exportData = [];
@@ -546,6 +646,7 @@ const ExamReviewer = () => {
           題目: question['題目'],
           答案: question['答案'],
           筆記: notes[questionId],
+          筆記格式: JSON.stringify(richTextFormat[questionId] || {}),
           標籤: questionTags.join(', '),
           錯誤次數: (questionStats[questionId]?.wrongCount || 0),
           是否標記為不會: markedQuestions.some(q => 
@@ -564,7 +665,7 @@ const ExamReviewer = () => {
     }
     
     // 轉換成CSV格式
-    let csv = '考試標題,科目,題號,題目,答案,筆記,標籤,錯誤次數,是否標記為不會\n';
+    let csv = '考試標題,科目,題號,題目,答案,筆記,筆記格式,標籤,錯誤次數,是否標記為不會\n';
     
     exportData.forEach(row => {
       // 處理CSV中的特殊字元
@@ -578,7 +679,7 @@ const ExamReviewer = () => {
         return str;
       };
       
-      csv += `${processField(row.考試標題)},${processField(row.科目)},${processField(row.題號)},${processField(row.題目)},${processField(row.答案)},${processField(row.筆記)},${processField(row.標籤)},${processField(row.錯誤次數)},${processField(row.是否標記為不會)}\n`;
+      csv += `${processField(row.考試標題)},${processField(row.科目)},${processField(row.題號)},${processField(row.題目)},${processField(row.答案)},${processField(row.筆記)},${processField(row.筆記格式)},${processField(row.標籤)},${processField(row.錯誤次數)},${processField(row.是否標記為不會)}\n`;
     });
     
     // 創建下載連結
@@ -601,12 +702,29 @@ const ExamReviewer = () => {
       document.body.removeChild(feedback);
     }, 2000);
   };
-
-  // 點擊顯示的標籤，篩選相同標籤的題目
-  const filterByTag = (tagName) => {
-    setSelectedTag(tagName);
-    // 滾動到頁面頂部
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  
+  // 解析並顯示格式化的筆記內容
+  const renderFormattedNote = (text) => {
+    if (!text) return '';
+    
+    // 替換粗體標記
+    let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // 替換斜體標記
+    formattedText = formattedText.replace(/_(.*?)_/g, '<em>$1</em>');
+    
+    // 替換顏色標記
+    formattedText = formattedText.replace(/\[color=(.*?)\](.*?)\[\/color\]/g, 
+      '<span style="color:$1">$2</span>');
+    
+    // 替換字號標記
+    formattedText = formattedText.replace(/\[size=(.*?)\](.*?)\[\/size\]/g, 
+      '<span style="font-size:$1">$2</span>');
+    
+    // 替換換行符為 <br>
+    formattedText = formattedText.replace(/\n/g, '<br>');
+    
+    return formattedText;
   };
 
   if (loading) {
@@ -989,12 +1107,75 @@ const ExamReviewer = () => {
             
             {showNoteEditor ? (
               <div className="mt-2">
+                {/* 格式化工具列 */}
+                <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-100 rounded">
+                  {/* 粗體按鈕 */}
+                  <button 
+                    className={`px-2 py-1 rounded ${currentFormat.bold ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+                    onClick={() => applyFormat('bold', !currentFormat.bold)}
+                    title="粗體文字"
+                  >
+                    <strong>B</strong>
+                  </button>
+                  
+                  {/* 斜體按鈕 */}
+                  <button 
+                    className={`px-2 py-1 rounded ${currentFormat.italic ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+                    onClick={() => applyFormat('italic', !currentFormat.italic)}
+                    title="斜體文字"
+                  >
+                    <em>I</em>
+                  </button>
+                  
+                  {/* 文字顏色選擇器 */}
+                  <div className="flex items-center">
+                    <span className="mr-1 text-sm">顏色:</span>
+                    <select 
+                      className="border rounded p-1 text-sm"
+                      value={currentFormat.color}
+                      onChange={(e) => applyFormat('color', e.target.value)}
+                    >
+                      <option value="black">黑色</option>
+                      <option value="red">紅色</option>
+                      <option value="blue">藍色</option>
+                      <option value="green">綠色</option>
+                      <option value="purple">紫色</option>
+                      <option value="orange">橙色</option>
+                    </select>
+                  </div>
+                  
+                  {/* 字體大小選擇器 */}
+                  <div className="flex items-center">
+                    <span className="mr-1 text-sm">字號:</span>
+                    <select 
+                      className="border rounded p-1 text-sm"
+                      value={currentFormat.fontSize}
+                      onChange={(e) => applyFormat('fontSize', e.target.value)}
+                    >
+                      <option value="0.75em">小</option>
+                      <option value="1em">中</option>
+                      <option value="1.25em">大</option>
+                      <option value="1.5em">特大</option>
+                    </select>
+                  </div>
+                  
+                  {/* 格式說明 */}
+                  <button 
+                    className="ml-auto px-2 py-1 text-sm text-blue-600 hover:underline"
+                    onClick={() => alert('格式化指南:\n- 粗體: 在文字前後加上 **\n- 斜體: 在文字前後加上 _\n- 顏色: 使用 [color=紅色]文字[/color]\n- 字號: 使用 [size=1.25em]文字[/size]\n\n或直接使用上方的格式工具!')}
+                  >
+                    格式說明
+                  </button>
+                </div>
+                
                 <textarea 
+                  ref={editorRef}
                   className="w-full p-2 border rounded min-h-[100px] text-left"
                   value={currentNote}
                   onChange={(e) => setCurrentNote(e.target.value)}
-                  placeholder="在此輸入筆記..."
+                  placeholder="在此輸入筆記，可使用格式標記..."
                 ></textarea>
+                
                 <div className="mt-2 text-right">
                   <button 
                     className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm"
@@ -1005,9 +1186,12 @@ const ExamReviewer = () => {
                 </div>
               </div>
             ) : (
-              <div className="mt-2 p-3 bg-gray-50 rounded min-h-[50px] whitespace-pre-wrap text-left">
-                {currentNote ? currentNote : <span className="text-gray-400">尚無筆記</span>}
-              </div>
+              <div 
+                className="mt-2 p-3 bg-gray-50 rounded min-h-[50px] whitespace-pre-wrap text-left"
+                dangerouslySetInnerHTML={{ 
+                  __html: currentNote ? renderFormattedNote(currentNote) : '<span class="text-gray-400">尚無筆記</span>' 
+                }}
+              ></div>
             )}
           </div>
         )}
